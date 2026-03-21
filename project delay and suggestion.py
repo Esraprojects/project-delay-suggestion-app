@@ -1,79 +1,27 @@
-# ===============================
-# IMPORT LIBRARIES
-# ===============================
 import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
 
 # ===============================
 # PAGE CONFIG
 # ===============================
-st.set_page_config(
-    page_title="Project Delay AI",
-    page_icon="🏗️",
-    layout="wide"
-)
+st.set_page_config(page_title="Project Delay AI", layout="wide")
 
 # ===============================
-# CUSTOM CSS (PREMIUM DESIGN)
+# UI HEADER
 # ===============================
-st.markdown("""
-<style>
-body {
-    background-color: #0e1117;
-}
-
-.main-title {
-    font-size: 40px;
-    font-weight: bold;
-    text-align: center;
-    color: #ffffff;
-}
-
-.sub-title {
-    text-align: center;
-    color: #bbbbbb;
-}
-
-.card {
-    background-color: #1c1f26;
-    padding: 20px;
-    border-radius: 15px;
-    box-shadow: 0px 4px 20px rgba(0,0,0,0.5);
-}
-
-.metric-box {
-    background: linear-gradient(135deg, #1f4037, #99f2c8);
-    padding: 15px;
-    border-radius: 10px;
-    text-align: center;
-    color: black;
-    font-weight: bold;
-}
-
-.footer {
-    text-align:center;
-    margin-top:40px;
-    color:gray;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ===============================
-# HEADER
-# ===============================
-st.markdown("<div class='main-title'>🏗️ Project Delay AI System</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>Smart Prediction • Risk Analysis • Decision Support</div>", unsafe_allow_html=True)
+st.title("🏗️ Project Delay AI System")
+st.write("Smart Prediction • Risk Analysis • Decision Support")
 st.markdown("<div style='text-align:center; color:#00ffcc;'>Made by Esra</div>", unsafe_allow_html=True)
 
-st.divider()
-
 # ===============================
-# SAMPLE DATA + TEMPLATE
+# SAMPLE DATA
 # ===============================
-st.markdown("## 📥 Download Sample Template")
-
+st.subheader("📥 Sample Template")
 sample_data = pd.DataFrame({
     "Project_Size":["Small","Medium","Large"],
     "Budget":[120000,300000,600000],
@@ -91,127 +39,184 @@ sample_data = pd.DataFrame({
     "Supply_Delay":["No","Yes","No"]
 })
 
-csv_template = sample_data.to_csv(index=False).encode('utf-8')
-
-st.download_button("⬇️ Download Template", csv_template, "template.csv")
+st.download_button("Download Template", sample_data.to_csv(index=False), "template.csv")
 st.dataframe(sample_data)
 
-st.divider()
+# ===============================
+# FEATURE SET
+# ===============================
+feature_cols = [
+    'Project_Size','Budget','Team_Size','Planned_Duration','Weather',
+    'Material_Availability','Manager_Experience','Contractor_Experience',
+    'Labor_Availability','Equipment_Availability','Site_Location',
+    'Permit_Approval','Inflation_Rate','Supply_Delay'
+]
+
+categorical_cols = [
+    'Project_Size','Weather','Material_Availability','Labor_Availability',
+    'Equipment_Availability','Site_Location','Permit_Approval','Supply_Delay'
+]
 
 # ===============================
-# MODEL TRAINING
+# COLUMN NORMALIZATION + AUTO MATCHING
 # ===============================
-@st.cache_data
-def train_model():
+
+def normalize_columns(df):
+    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+    return df
+
+# Alias mapping for flexible input handling
+COLUMN_ALIASES = {
+    'project_size': 'Project_Size',
+    'budget': 'Budget',
+    'team_size': 'Team_Size',
+    'planned_duration': 'Planned_Duration',
+    'weather': 'Weather',
+    'material_availability': 'Material_Availability',
+    'manager_experience': 'Manager_Experience',
+    'contractor_experience': 'Contractor_Experience',
+    'labor_availability': 'Labor_Availability',
+    'equipment_availability': 'Equipment_Availability',
+    'site_location': 'Site_Location',
+    'permit_approval': 'Permit_Approval',
+    'inflation_rate': 'Inflation_Rate',
+    'supply_delay': 'Supply_Delay'
+}
+
+# ===============================
+# MODEL TRAINING PIPELINE
+# ===============================
+@st.cache_resource
+def train_models():
     np.random.seed(42)
     data = []
 
     for _ in range(1200):
-        size = np.random.choice(['Small','Medium','Large'])
-        budget = np.random.randint(80000,700000)
-        team = np.random.randint(3,30)
-        duration = np.random.randint(20,180)
-        weather = np.random.choice(['Good','Bad'])
-        material = np.random.choice(['Yes','No'])
-        manager_exp = np.random.randint(1,15)
-        contractor_exp = np.random.randint(1,20)
-        labor = np.random.choice(['High','Medium','Low'])
-        equipment = np.random.choice(['Yes','No'])
-        location = np.random.choice(['Urban','Rural'])
-        permit = np.random.choice(['Yes','No'])
-        inflation = np.random.uniform(5,30)
-        supply = np.random.choice(['Yes','No'])
+        row = {
+            'Project_Size': np.random.choice(['Small','Medium','Large']),
+            'Budget': np.random.randint(80000,700000),
+            'Team_Size': np.random.randint(3,30),
+            'Planned_Duration': np.random.randint(20,180),
+            'Weather': np.random.choice(['Good','Bad']),
+            'Material_Availability': np.random.choice(['Yes','No']),
+            'Manager_Experience': np.random.randint(1,15),
+            'Contractor_Experience': np.random.randint(1,20),
+            'Labor_Availability': np.random.choice(['High','Medium','Low']),
+            'Equipment_Availability': np.random.choice(['Yes','No']),
+            'Site_Location': np.random.choice(['Urban','Rural']),
+            'Permit_Approval': np.random.choice(['Yes','No']),
+            'Inflation_Rate': np.random.uniform(5,30),
+            'Supply_Delay': np.random.choice(['Yes','No'])
+        }
 
         delay = 0
-        if weather == 'Bad': delay += 10
-        if material == 'No': delay += 15
-        if labor == 'Low': delay += 10
-        if equipment == 'No': delay += 8
-        if permit == 'No': delay += 12
-        if supply == 'Yes': delay += 10
-        if location == 'Rural': delay += 5
-        if manager_exp < 5: delay += 7
+        if row['Weather']=='Bad': delay += 10
+        if row['Material_Availability']=='No': delay += 15
+        if row['Labor_Availability']=='Low': delay += 10
+        if row['Equipment_Availability']=='No': delay += 8
+        if row['Permit_Approval']=='No': delay += 12
+        if row['Supply_Delay']=='Yes': delay += 10
+        if row['Site_Location']=='Rural': delay += 5
+        if row['Manager_Experience'] < 5: delay += 7
 
-        delay += int(inflation / 5)
+        delay += int(row['Inflation_Rate']/5)
         delay += np.random.randint(0,5)
 
-        data.append([
-            size,budget,team,duration,weather,material,
-            manager_exp,contractor_exp,labor,equipment,
-            location,permit,inflation,supply,delay
-        ])
+        row['Delay_Days'] = delay
+        row['Status'] = 1 if delay > 10 else 0
 
-    df = pd.DataFrame(data, columns=[
-        'Project_Size','Budget','Team_Size','Planned_Duration','Weather',
-        'Material_Availability','Manager_Experience','Contractor_Experience',
-        'Labor_Availability','Equipment_Availability','Site_Location',
-        'Permit_Approval','Inflation_Rate','Supply_Delay','Delay_Days'
-    ])
+        data.append(row)
 
-    df['Status'] = df['Delay_Days'].apply(lambda x: 1 if x > 10 else 0)
+    df = pd.DataFrame(data)
 
-    mapping = {
-        "Small":0,"Medium":1,"Large":2,
-        "Bad":0,"Good":1,
-        "No":0,"Yes":1,
-        "Low":0,"Medium":1,"High":2,
-        "Rural":0,"Urban":1
-    }
-
-    df = df.replace(mapping)
-
-    X = df.drop(['Delay_Days','Status'], axis=1)
+    X = df[feature_cols]
     y_class = df['Status']
     y_reg = df['Delay_Days']
 
-    clf = RandomForestClassifier().fit(X, y_class)
-    reg = RandomForestRegressor().fit(X, y_reg)
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
+        ],
+        remainder='passthrough'
+    )
+
+    clf = Pipeline([
+        ('preprocessor', preprocessor),
+        ('model', RandomForestClassifier())
+    ])
+
+    reg = Pipeline([
+        ('preprocessor', preprocessor),
+        ('model', RandomForestRegressor())
+    ])
+
+    clf.fit(X, y_class)
+    reg.fit(X, y_reg)
 
     return clf, reg
 
-clf, reg = train_model()
+clf, reg = train_models()
 
 # ===============================
 # FILE UPLOAD
 # ===============================
-st.markdown("## 📂 Upload Excel File")
-
-file = st.file_uploader("Upload your project data (.xlsx)", type=["xlsx"])
+st.subheader("📂 Upload File (Excel or CSV)")
+file = st.file_uploader("Upload your dataset", type=["csv","xlsx"])
 
 if file:
-    df = pd.read_excel(file)
+    # Read file
+    if file.name.endswith('.csv'):
+        df = pd.read_csv(file)
+    else:
+        df = pd.read_excel(file)
 
-    st.success("File uploaded successfully")
+    # Normalize column names
+    df = normalize_columns(df)
 
+    # Rename columns using aliases
+    df = df.rename(columns=COLUMN_ALIASES)
+
+    st.success("File uploaded and processed successfully")
     st.dataframe(df)
 
-    mapping = {
-        "Small":0,"Medium":1,"Large":2,
-        "Bad":0,"Good":1,
-        "No":0,"Yes":1,
-        "Low":0,"Medium":1,"High":2,
-        "Rural":0,"Urban":1
-    }
+    # Keep only relevant columns, create missing ones if absent
+    for col in feature_cols:
+        if col not in df.columns:
+            df[col] = np.nan
 
-    df = df.replace(mapping)
+    # Reorder columns exactly as expected
+    X = df[feature_cols]
 
-    df['Delay_Status'] = clf.predict(df)
-    df['Delay_Days'] = reg.predict(df)
+    # Handle missing numeric values
+    for col in numeric_cols:
+        if col in X.columns:
+            X[col] = pd.to_numeric(X[col], errors='coerce')
+            X[col] = X[col].fillna(X[col].median())
+
+    # Handle missing categorical values
+    for col in categorical_cols:
+        if col in X.columns:
+            X[col] = X[col].fillna('Unknown')
+
+    # Predictions
+    df['Delay_Status'] = clf.predict(X)
+    df['Delay_Days'] = reg.predict(X)
+
     df['Delay_Status'] = df['Delay_Status'].map({1:"Delayed",0:"On Time"})
 
     def risk(x):
-        if x > 20: return "🔴 High"
-        elif x > 10: return "🟡 Medium"
-        else: return "🟢 Low"
+        if x > 20:
+            return "🔴 High"
+        elif x > 10:
+            return "🟡 Medium"
+        return "🟢 Low"
 
     df['Risk_Level'] = df['Delay_Days'].apply(risk)
 
-    st.markdown("## 📊 Results")
+    st.subheader("📊 Results")
     st.dataframe(df)
 
-    # KPI
-    st.markdown("## 📈 Dashboard")
-
+    st.subheader("📈 Dashboard")
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Projects", len(df))
     c2.metric("Delayed", (df['Delay_Status']=="Delayed").sum())
@@ -219,11 +224,5 @@ if file:
 
     st.bar_chart(df['Risk_Level'].value_counts())
 
-    # Download
     csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("⬇️ Download Results", csv, "results.csv")
-
-# ===============================
-# FOOTER
-# ===============================
-st.markdown("<div class='footer'>Made by Esra • AI Project System</div>", unsafe_allow_html=True)
+    st.download_button("Download Results", csv, "results.csv")
