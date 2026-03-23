@@ -102,7 +102,7 @@ def generate_training_data(n=500):
 @st.cache_data
 def generate_sample_data_for_user(n=50):
     """Generate a separate sample dataset (without target columns) for user download."""
-    np.random.seed(42)  # different seed to ensure diversity from training data
+    np.random.seed(42)
     data = pd.DataFrame({
         'Project_Size': np.random.choice(['Small', 'Medium', 'Large'], n, p=[0.4, 0.4, 0.2]),
         'Budget': np.random.randint(50000, 2000000, n),
@@ -332,122 +332,136 @@ def generate_pdf_report(df, clf_score, reg_score, risk_fig, delay_fig, cause_fig
 # MAIN APP
 # ===============================
 def main():
-    # Sidebar
-    st.sidebar.header("📁 Data Source")
-    data_source = st.sidebar.radio("Choose data source:", ["Use Sample Data", "Upload Your Data"])
-    use_tuning = st.sidebar.checkbox("Enable hyperparameter tuning (slower but potentially better)", value=False)
-    
-    # --- Train the model (always on a large synthetic dataset) ---
-    with st.spinner("Training prediction models..."):
-        training_df = generate_training_data(500)   # large dataset for training
-        clf, reg = train_models(training_df, tune=use_tuning)
-    
-    # Cross-validation scores for display
-    X_train = training_df[FEATURE_COLS]
-    y_class = training_df['Status']
-    y_reg = training_df['Delay_Days']
-    clf_cv = cross_val_score(clf, X_train, y_class, cv=3, scoring='f1').mean()
-    reg_cv = -cross_val_score(reg, X_train, y_reg, cv=3, scoring='neg_mean_absolute_error').mean()
-    
-    # --- Data acquisition and prediction ---
-    if data_source == "Use Sample Data":
-        # Generate a fresh sample (input only) for the user to see
-        df_input = generate_sample_data_for_user(50)  # only FEATURE_COLS
-        st.sidebar.success("Sample data ready (50 projects).")
-        # Download sample template
-        csv_sample = df_input.to_csv(index=False).encode('utf-8')
-        st.sidebar.download_button(
-            label="📥 Download Sample Data (CSV)",
-            data=csv_sample,
-            file_name="project_sample.csv",
-            mime="text/csv",
-            help="Download this sample to test or modify."
-        )
-    else:
-        uploaded_file = st.sidebar.file_uploader("Upload CSV or Excel", type=['csv', 'xlsx'])
-        if uploaded_file:
-            try:
-                if uploaded_file.name.endswith('.csv'):
-                    df_input = pd.read_csv(uploaded_file)
-                else:
-                    df_input = pd.read_excel(uploaded_file)
-                st.sidebar.success(f"Loaded {len(df_input)} rows")
-            except Exception as e:
-                st.sidebar.error(f"Error reading file: {e}")
-                st.stop()
-        else:
-            st.sidebar.info("Please upload a file to continue.")
-            st.stop()
-    
-    # --- Data preview (show only input columns for sample data) ---
-    with st.expander("📋 Data Preview (first 10 rows)"):
+    try:
+        # Sidebar
+        st.sidebar.header("📁 Data Source")
+        data_source = st.sidebar.radio("Choose data source:", ["Use Sample Data", "Upload Your Data"])
+        use_tuning = st.sidebar.checkbox("Enable hyperparameter tuning (slower but potentially better)", value=False)
+        
+        # --- Train the model (always on a large synthetic dataset) ---
+        with st.spinner("Training prediction models..."):
+            training_df = generate_training_data(500)   # large dataset for training
+            clf, reg = train_models(training_df, tune=use_tuning)
+        
+        # Cross-validation scores for display
+        X_train = training_df[FEATURE_COLS]
+        y_class = training_df['Status']
+        y_reg = training_df['Delay_Days']
+        clf_cv = cross_val_score(clf, X_train, y_class, cv=3, scoring='f1').mean()
+        reg_cv = -cross_val_score(reg, X_train, y_reg, cv=3, scoring='neg_mean_absolute_error').mean()
+        
+        # --- Data acquisition and prediction ---
         if data_source == "Use Sample Data":
-            st.dataframe(df_input.head(10))
-            st.caption("Note: This sample contains only the input features required for prediction.")
-        else:
-            # Show the full uploaded file (may contain extra columns)
-            st.dataframe(df_input.head(10))
-    
-    # --- Predictions ---
-    result_df = add_predictions(df_input.copy(), clf, reg)
-    
-    # --- Display results ---
-    st.subheader("📊 Prediction Results")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Projects", len(result_df))
-    with col2:
-        delayed = len(result_df[result_df['Delay_Status'] == 'Delayed'])
-        st.metric("Delayed Projects", delayed, delta=f"{delayed/len(result_df)*100:.1f}%")
-    with col3:
-        avg_delay = result_df['Delay_Days'].mean()
-        st.metric("Avg Delay Days", f"{avg_delay:.1f}")
-    with col4:
-        high_risk = len(result_df[result_df['Risk_Level'] == '🔴 High'])
-        st.metric("High Risk Projects", high_risk)
-    
-    st.subheader("📄 Detailed Results")
-    st.dataframe(result_df, use_container_width=True)
-    
-    # Download results CSV
-    csv_results = result_df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download Results CSV", csv_results, "delay_results.csv", "text/csv")
-    
-    # --- Visualizations ---
-    st.subheader("📈 Visual Analysis")
-    risk_fig = plot_risk_distribution(result_df)
-    delay_fig = plot_delay_histogram(result_df)
-    cause_fig = plot_top_causes(result_df)
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.pyplot(risk_fig)
-        st.caption("Risk levels of projects")
-    with col2:
-        st.pyplot(delay_fig)
-        st.caption("Distribution of predicted delay days")
-    st.pyplot(cause_fig)
-    st.caption("Top root causes contributing to delays")
-    
-    # --- PDF Report ---
-    st.subheader("📄 Generate Comprehensive Report")
-    if st.button("Generate PDF Report with Analysis & Suggestions"):
-        with st.spinner("Creating report..."):
-            pdf_buffer = generate_pdf_report(
-                result_df, clf_cv, reg_cv,
-                risk_fig, delay_fig, cause_fig
+            # Generate a fresh sample (input only) for the user to see
+            df_input = generate_sample_data_for_user(50)  # only FEATURE_COLS
+            st.sidebar.success("Sample data ready (50 projects).")
+            # Download sample template from sidebar
+            csv_sample = df_input.to_csv(index=False).encode('utf-8')
+            st.sidebar.download_button(
+                label="📥 Download Sample Data (CSV)",
+                data=csv_sample,
+                file_name="project_sample.csv",
+                mime="text/csv",
+                help="Download this sample to test or modify."
             )
-        st.download_button(
-            label="⬇️ Download Full Report (PDF)",
-            data=pdf_buffer,
-            file_name="project_delay_report.pdf",
-            mime="application/pdf"
-        )
-        st.success("Report generated! Click the button above to download.")
+        else:
+            uploaded_file = st.sidebar.file_uploader("Upload CSV or Excel", type=['csv', 'xlsx'])
+            if uploaded_file:
+                try:
+                    if uploaded_file.name.endswith('.csv'):
+                        df_input = pd.read_csv(uploaded_file)
+                    else:
+                        df_input = pd.read_excel(uploaded_file)
+                    st.sidebar.success(f"Loaded {len(df_input)} rows")
+                except Exception as e:
+                    st.sidebar.error(f"Error reading file: {e}")
+                    st.stop()
+            else:
+                st.sidebar.info("Please upload a file to continue.")
+                st.stop()
+        
+        # --- Data preview (with download button for sample data) ---
+        with st.expander("📋 Data Preview (first 10 rows)"):
+            if data_source == "Use Sample Data":
+                st.dataframe(df_input.head(10))
+                st.caption("Note: This sample contains only the input features required for prediction.")
+                # Add download button inside the preview for convenience
+                col1, col2, col3 = st.columns([1, 1, 1])
+                with col2:
+                    st.download_button(
+                        label="📥 Download This Sample Data",
+                        data=df_input.to_csv(index=False).encode('utf-8'),
+                        file_name="project_sample.csv",
+                        mime="text/csv",
+                        help="Download the exact sample data shown above."
+                    )
+            else:
+                st.dataframe(df_input.head(10))
+        
+        # --- Predictions ---
+        result_df = add_predictions(df_input.copy(), clf, reg)
+        
+        # --- Display results ---
+        st.subheader("📊 Prediction Results")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Projects", len(result_df))
+        with col2:
+            delayed = len(result_df[result_df['Delay_Status'] == 'Delayed'])
+            st.metric("Delayed Projects", delayed, delta=f"{delayed/len(result_df)*100:.1f}%")
+        with col3:
+            avg_delay = result_df['Delay_Days'].mean()
+            st.metric("Avg Delay Days", f"{avg_delay:.1f}")
+        with col4:
+            high_risk = len(result_df[result_df['Risk_Level'] == '🔴 High'])
+            st.metric("High Risk Projects", high_risk)
+        
+        st.subheader("📄 Detailed Results")
+        st.dataframe(result_df, use_container_width=True)
+        
+        # Download results CSV
+        csv_results = result_df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download Results CSV", csv_results, "delay_results.csv", "text/csv")
+        
+        # --- Visualizations ---
+        st.subheader("📈 Visual Analysis")
+        risk_fig = plot_risk_distribution(result_df)
+        delay_fig = plot_delay_histogram(result_df)
+        cause_fig = plot_top_causes(result_df)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.pyplot(risk_fig)
+            st.caption("Risk levels of projects")
+        with col2:
+            st.pyplot(delay_fig)
+            st.caption("Distribution of predicted delay days")
+        st.pyplot(cause_fig)
+        st.caption("Top root causes contributing to delays")
+        
+        # --- PDF Report ---
+        st.subheader("📄 Generate Comprehensive Report")
+        if st.button("Generate PDF Report with Analysis & Suggestions"):
+            with st.spinner("Creating report..."):
+                pdf_buffer = generate_pdf_report(
+                    result_df, clf_cv, reg_cv,
+                    risk_fig, delay_fig, cause_fig
+                )
+            st.download_button(
+                label="⬇️ Download Full Report (PDF)",
+                data=pdf_buffer,
+                file_name="project_delay_report.pdf",
+                mime="application/pdf"
+            )
+            st.success("Report generated! Click the button above to download.")
+        
+        # Footer
+        st.markdown("---")
+        st.markdown("<p style='text-align: center;'>Made by Esrom | Project Delay AI System</p>", unsafe_allow_html=True)
     
-    # Footer
-    st.markdown("---")
-    st.markdown("<p style='text-align: center;'>Made by Esrom | Project Delay AI System</p>", unsafe_allow_html=True)
+    except Exception as e:
+        st.error(f"An error occurred: {e}")
+        st.exception(e)  # This prints the full traceback in the app
 
 if __name__ == "__main__":
     main()
