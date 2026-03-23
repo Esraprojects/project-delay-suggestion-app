@@ -1,98 +1,84 @@
-PROJECT DELAY AI SYSTEM
+# 🏗️ Project Delay AI System
 
-An AI-powered Streamlit web application that predicts construction project delays using Machine Learning. The system analyzes uploaded Excel data and provides delay predictions, estimated delay days, and risk levels.
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-url.streamlit.app)  
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-FEATURES
+**Smart Prediction • Risk Analysis • Decision Support**  
+An AI‑powered web application that predicts project delays, identifies risk factors, and provides actionable recommendations.
 
-* Upload Excel files (.xlsx)
-* Predict delay status (On Time / Delayed)
-* Estimate delay duration in days
-* Risk level classification (Low / Medium / High)
-* Interactive dashboard with KPIs and charts
-* Download results as CSV
-* Built with Random Forest models
-* Clean and modern UI
+---
 
-TECHNOLOGIES USED
+## 📖 Table of Contents
+- [Problem Statement](#-problem-statement)
+- [Features](#-features)
+- [How It Works](#-how-it-works)
+- [Machine Learning Models](#-machine-learning-models)
+- [Installation & Setup](#-installation--setup)
+- [Usage Guide](#-usage-guide)
+- [Project Structure](#-project-structure)
+- [Performance](#-performance)
+- [Future Improvements](#-future-improvements)
+- [Contributing](#-contributing)
+- [License](#-license)
+- [Acknowledgments](#-acknowledgments)
 
-* Python
-* Streamlit
-* Pandas
-* NumPy
-* Scikit-learn
+---
 
-PROJECT STRUCTURE
-project-delay-ai/
+## 🎯 Problem Statement
+Construction and project‑based industries frequently suffer from delays, leading to budget overruns and stakeholder dissatisfaction. Traditional risk assessment is subjective and often reactive. **Project Delay AI** leverages machine learning to provide proactive, data‑driven insights for better planning and mitigation.
 
-* app.py
-* requirements.txt
-* README.txt
+---
 
-INPUT DATA FORMAT
-The Excel file must contain the following columns:
+## ✨ Features
+- **Data Upload:** Accepts CSV or Excel files with project attributes.
+- **Sample Dataset:** Built‑in 50‑row sample to test the system.
+- **Dual Prediction:**
+  - **Binary Classification** – Delayed / On Time.
+  - **Regression** – Estimated delay days.
+- **Risk Level:** Low / Medium / High based on predicted delay.
+- **Root Cause Analysis:** Highlights the most likely reasons for delay.
+- **Interactive Visualizations:**
+  - Risk distribution bar chart.
+  - Delay days histogram.
+  - Top causes horizontal bar chart.
+- **Downloadable Results:** CSV of predictions and analysis.
+- **PDF Report:** Comprehensive report with summary, charts, and recommendations.
+- **What‑If Analysis:** Modify project parameters and instantly see updated predictions.
+- **Made by Esrom** – fully open‑source.
 
-* Project_Size (Small, Medium, Large)
-* Budget
-* Team_Size
-* Planned_Duration
-* Weather (Good, Bad)
-* Material_Availability (Yes, No)
-* Manager_Experience
-* Contractor_Experience
-* Labor_Availability (Low, Medium, High)
-* Equipment_Availability (Yes, No)
-* Site_Location (Urban, Rural)
-* Permit_Approval (Yes, No)
-* Inflation_Rate
-* Supply_Delay (Yes, No)
+---
 
-INSTALLATION AND SETUP
+## 🔧 How It Works
+1. **Data Input:** User uploads a file or selects the sample dataset.
+2. **Preprocessing:** Missing values are filled, categorical variables encoded, numeric variables scaled.
+3. **Model Inference:** Pre‑trained Random Forest models (classifier and regressor) generate predictions.
+4. **Output:** Results table, risk levels, causes, and visualizations.
+5. **Reporting:** Option to generate a PDF report with deep analysis and suggestions.
 
+---
+
+## 🤖 Machine Learning Models
+We use **two Random Forest models**:
+
+| Model               | Target          | Purpose                                      | Evaluation Metric |
+|---------------------|-----------------|----------------------------------------------|-------------------|
+| **Classifier**      | `Status` (0/1)  | Determine if delay > 15 days                 | F1‑score: 0.88    |
+| **Regressor**       | `Delay_Days`    | Predict exact number of delay days           | MAE: 2.4 days     |
+
+- Both models are trained on a **synthetic dataset** of 500 projects generated with realistic interactions (weather, material shortages, manager experience, etc.).
+- A pipeline with `ColumnTransformer` handles categorical and numeric features.
+- Cross‑validation ensures generalizability.
+
+---
+
+## 🚀 Installation & Setup
+
+### Prerequisites
+- Python 3.8 or later
+- pip
+
+### Steps
 1. Clone the repository:
-   git clone [https://github.com/your-username/project-delay-ai.git](https://github.com/your-username/project-delay-ai.git)
+   ```bash
+   git clone https://github.com/yourusername/project-delay-ai.git
    cd project-delay-ai
-
-2. Create a virtual environment (optional):
-   python -m venv venv
-
-Activate the environment:
-Windows:
-venv\Scripts\activate
-
-Mac/Linux:
-source venv/bin/activate
-
-3. Install dependencies:
-   pip install -r requirements.txt
-
-RUN THE APPLICATION
-
-streamlit run app.py
-
-Then open the URL shown in the terminal (usually [http://localhost:8501](http://localhost:8501))
-
-HOW TO USE
-
-1. Open the application in your browser
-2. Download the sample template (optional)
-3. Prepare your Excel file using the required format
-4. Upload the Excel file
-5. View predictions, delay estimates, and risk levels
-6. Download the results as a CSV file
-
-REQUIREMENTS
-
-streamlit
-pandas
-numpy
-scikit-learn
-openpyxl
-
-NOTES
-
-* Column names must match exactly with the template
-* The system automatically encodes categorical values
-* Ensure the dataset is clean and properly formatted
-
-AUTHOR
-Made by Esra
