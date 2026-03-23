@@ -1,7 +1,6 @@
-streamlit
-pandas
-numpy
-scikit-learn
-openpyxl
-matplotlib
-reportlab
+streamlit>=1.25.0
+pandas>=1.5.0
+numpy>=1.23.0
+matplotlib>=3.5.0
+scikit-learn>=1.2.0
+reportlab>=3.6.0
