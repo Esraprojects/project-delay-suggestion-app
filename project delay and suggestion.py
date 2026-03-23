@@ -5,9 +5,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -139,11 +138,10 @@ def train_models(df, tune=False):
     
     # Optional hyperparameter tuning (simplified for speed)
     if tune:
-        # Only simple tuning to keep app responsive
         param_grid_clf = {'classifier__n_estimators': [100, 200]}
-        from sklearn.model_selection import GridSearchCV
         clf = GridSearchCV(clf, param_grid_clf, cv=3, scoring='f1', n_jobs=-1)
-        reg = GridSearchCV(reg, {'regressor__n_estimators': [100, 200]}, cv=3, scoring='neg_mean_absolute_error', n_jobs=-1)
+        param_grid_reg = {'regressor__n_estimators': [100, 200]}
+        reg = GridSearchCV(reg, param_grid_reg, cv=3, scoring='neg_mean_absolute_error', n_jobs=-1)
         clf.fit(X, y_class)
         reg.fit(X, y_reg)
         return clf.best_estimator_, reg.best_estimator_
@@ -370,8 +368,6 @@ def main():
     X_train = df[FEATURE_COLS]
     y_class = df['Status']
     y_reg = df['Delay_Days']
-    preprocessor = clf.named_steps['preprocessor']
-    X_pre = preprocessor.fit_transform(X_train)
     clf_cv = cross_val_score(clf, X_train, y_class, cv=3, scoring='f1').mean()
     reg_cv = -cross_val_score(reg, X_train, y_reg, cv=3, scoring='neg_mean_absolute_error').mean()
     
