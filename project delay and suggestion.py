@@ -1,251 +1,441 @@
 # ===============================
-# IMPORTS (SAFE)
+# IMPORTS
 # ===============================
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.pipeline import Pipeline
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder
-
-# Safe report import
-try:
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
-    from reportlab.lib.styles import getSampleStyleSheet
-    REPORT_AVAILABLE = True
-except:
-    REPORT_AVAILABLE = False
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+from sklearn.metrics import classification_report, confusion_matrix, mean_absolute_error
+import io
+import tempfile
+import os
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.units import inch
+import warnings
+warnings.filterwarnings('ignore')
 
 # ===============================
 # PAGE CONFIG
 # ===============================
-st.set_page_config(page_title="Project Delay AI", layout="wide")
+st.set_page_config(page_title="Project Delay AI", layout="wide", page_icon="📊")
+st.markdown("<h1 style='text-align: center; color: #2E86C1;'>🏗️ Project Delay AI System</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Smart Prediction • Risk Analysis • Decision Support</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size: 14px;'>Made by Esrom</p>", unsafe_allow_html=True)
+st.markdown("---")
 
 # ===============================
-# HEADER
+# CONSTANTS
 # ===============================
-st.title("🏗️ Project Delay AI System")
-st.write("Smart Prediction • Risk Analysis • Decision Support")
-st.markdown("<div style='text-align:center; color:#00ffcc;'>Made by Esra</div>", unsafe_allow_html=True)
-
-# ===============================
-# FEATURES
-# ===============================
-feature_cols = [
-    'Project_Size','Budget','Team_Size','Planned_Duration','Weather',
-    'Material_Availability','Manager_Experience','Contractor_Experience',
-    'Labor_Availability','Equipment_Availability','Site_Location',
-    'Permit_Approval','Inflation_Rate','Supply_Delay'
+FEATURE_COLS = [
+    'Project_Size', 'Budget', 'Team_Size', 'Planned_Duration', 'Weather',
+    'Material_Availability', 'Manager_Experience', 'Contractor_Experience',
+    'Labor_Availability', 'Equipment_Availability', 'Site_Location',
+    'Permit_Approval', 'Inflation_Rate', 'Supply_Delay'
 ]
 
-categorical_cols = [
-    'Project_Size','Weather','Material_Availability','Labor_Availability',
-    'Equipment_Availability','Site_Location','Permit_Approval','Supply_Delay'
+CATEGORICAL_COLS = [
+    'Project_Size', 'Weather', 'Material_Availability', 'Labor_Availability',
+    'Equipment_Availability', 'Site_Location', 'Permit_Approval', 'Supply_Delay'
 ]
 
-numeric_cols = [col for col in feature_cols if col not in categorical_cols]
+NUMERIC_COLS = [col for col in FEATURE_COLS if col not in CATEGORICAL_COLS]
 
 # ===============================
-# SAMPLE DATA (REALISTIC 100 ROWS)
+# HELPER FUNCTIONS
 # ===============================
-st.subheader("📥 Download Realistic Template")
-
-try:
-    np.random.seed(2)
-    sample_data = pd.DataFrame({
-        'Project_Size': np.random.choice(['Small','Medium','Large'],100),
-        'Budget': np.random.randint(100000,800000,100),
-        'Team_Size': np.random.randint(5,30,100),
-        'Planned_Duration': np.random.randint(30,180,100),
-        'Weather': np.random.choice(['Good','Bad'],100),
-        'Material_Availability': np.random.choice(['Yes','No'],100),
-        'Manager_Experience': np.random.randint(1,15,100),
-        'Contractor_Experience': np.random.randint(3,20,100),
-        'Labor_Availability': np.random.choice(['High','Medium','Low'],100),
-        'Equipment_Availability': np.random.choice(['Yes','No'],100),
-        'Site_Location': np.random.choice(['Urban','Rural'],100),
-        'Permit_Approval': np.random.choice(['Yes','No'],100),
-        'Inflation_Rate': np.random.uniform(5,25,100),
-        'Supply_Delay': np.random.choice(['Yes','No'],100)
+@st.cache_data
+def generate_sample_data(n=50):
+    """Generate a realistic sample dataset with at least 50 rows."""
+    np.random.seed(42)
+    data = pd.DataFrame({
+        'Project_Size': np.random.choice(['Small', 'Medium', 'Large'], n, p=[0.4, 0.4, 0.2]),
+        'Budget': np.random.randint(50000, 2000000, n),
+        'Team_Size': np.random.randint(3, 50, n),
+        'Planned_Duration': np.random.randint(30, 365, n),
+        'Weather': np.random.choice(['Good', 'Bad'], n, p=[0.7, 0.3]),
+        'Material_Availability': np.random.choice(['Yes', 'No'], n, p=[0.8, 0.2]),
+        'Manager_Experience': np.random.randint(1, 25, n),
+        'Contractor_Experience': np.random.randint(1, 30, n),
+        'Labor_Availability': np.random.choice(['High', 'Medium', 'Low'], n, p=[0.5, 0.3, 0.2]),
+        'Equipment_Availability': np.random.choice(['Yes', 'No'], n, p=[0.9, 0.1]),
+        'Site_Location': np.random.choice(['Urban', 'Rural'], n, p=[0.6, 0.4]),
+        'Permit_Approval': np.random.choice(['Yes', 'No'], n, p=[0.85, 0.15]),
+        'Inflation_Rate': np.random.uniform(2, 15, n),
+        'Supply_Delay': np.random.choice(['Yes', 'No'], n, p=[0.7, 0.3])
     })
+    
+    # Generate realistic delay days based on features
+    delays = []
+    for _, r in data.iterrows():
+        base_delay = np.random.normal(0, 3)
+        if r['Weather'] == 'Bad':
+            base_delay += np.random.uniform(5, 15)
+        if r['Material_Availability'] == 'No':
+            base_delay += np.random.uniform(5, 20)
+        if r['Labor_Availability'] == 'Low':
+            base_delay += np.random.uniform(3, 12)
+        if r['Equipment_Availability'] == 'No':
+            base_delay += np.random.uniform(2, 10)
+        if r['Permit_Approval'] == 'No':
+            base_delay += np.random.uniform(5, 18)
+        if r['Supply_Delay'] == 'Yes':
+            base_delay += np.random.uniform(4, 12)
+        if r['Site_Location'] == 'Rural':
+            base_delay += np.random.uniform(1, 8)
+        if r['Manager_Experience'] < 5:
+            base_delay += np.random.uniform(2, 10)
+        if r['Contractor_Experience'] < 3:
+            base_delay += np.random.uniform(1, 7)
+        delays.append(max(0, base_delay))
+    
+    data['Delay_Days'] = delays
+    data['Status'] = (data['Delay_Days'] > 15).astype(int)
+    return data
 
-    st.download_button("Download Template", sample_data.to_csv(index=False), "template.csv")
-    st.dataframe(sample_data.head(20))
-
-except Exception as e:
-    st.error("Error generating sample data")
-    st.exception(e)
-
-# ===============================
-# MODEL TRAINING
-# ===============================
 @st.cache_resource
-def train_model():
-    try:
-        df = sample_data.copy()
-        delays = []
-
-        for _, r in df.iterrows():
-            d = np.random.randint(0, 8)
-
-            if r['Weather']=='Bad': d+=np.random.randint(5,12)
-            if r['Material_Availability']=='No': d+=np.random.randint(5,15)
-            if r['Labor_Availability']=='Low': d+=np.random.randint(3,10)
-            if r['Equipment_Availability']=='No': d+=np.random.randint(3,8)
-            if r['Permit_Approval']=='No': d+=np.random.randint(5,12)
-            if r['Supply_Delay']=='Yes': d+=np.random.randint(4,10)
-            if r['Site_Location']=='Rural': d+=np.random.randint(2,6)
-            if r['Manager_Experience']<5: d+=np.random.randint(3,8)
-
-            delays.append(d)
-
-        df['Delay_Days'] = delays
-        df['Status'] = (df['Delay_Days'] > 15).astype(int)
-
-        X = df[feature_cols]
-        y1 = df['Status']
-        y2 = df['Delay_Days']
-
-        pre = ColumnTransformer([
-            ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
-        ], remainder='passthrough')
-
-        clf = Pipeline([('p', pre), ('m', RandomForestClassifier())])
-        reg = Pipeline([('p', pre), ('m', RandomForestRegressor())])
-
-        clf.fit(X, y1)
-        reg.fit(X, y2)
-
+def train_models(df, tune=False):
+    """Train classification and regression models."""
+    X = df[FEATURE_COLS]
+    y_class = df['Status']
+    y_reg = df['Delay_Days']
+    
+    # Preprocessing pipeline
+    numeric_transformer = Pipeline(steps=[
+        ('imputer', SimpleImputer(strategy='median')),
+        ('scaler', StandardScaler())
+    ])
+    categorical_transformer = Pipeline(steps=[
+        ('imputer', SimpleImputer(strategy='constant', fill_value='Unknown')),
+        ('onehot', OneHotEncoder(handle_unknown='ignore', sparse_output=False))
+    ])
+    
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num', numeric_transformer, NUMERIC_COLS),
+            ('cat', categorical_transformer, CATEGORICAL_COLS)
+        ])
+    
+    # Classifier
+    clf = Pipeline(steps=[
+        ('preprocessor', preprocessor),
+        ('classifier', RandomForestClassifier(random_state=42, class_weight='balanced'))
+    ])
+    
+    # Regressor
+    reg = Pipeline(steps=[
+        ('preprocessor', preprocessor),
+        ('regressor', RandomForestRegressor(random_state=42))
+    ])
+    
+    # Optional hyperparameter tuning (simplified for speed)
+    if tune:
+        # Only simple tuning to keep app responsive
+        param_grid_clf = {'classifier__n_estimators': [100, 200]}
+        from sklearn.model_selection import GridSearchCV
+        clf = GridSearchCV(clf, param_grid_clf, cv=3, scoring='f1', n_jobs=-1)
+        reg = GridSearchCV(reg, {'regressor__n_estimators': [100, 200]}, cv=3, scoring='neg_mean_absolute_error', n_jobs=-1)
+        clf.fit(X, y_class)
+        reg.fit(X, y_reg)
+        return clf.best_estimator_, reg.best_estimator_
+    else:
+        clf.fit(X, y_class)
+        reg.fit(X, y_reg)
         return clf, reg
 
-    except Exception as e:
-        st.error("Model training failed")
-        st.exception(e)
-        return None, None
+def preprocess_uploaded_data(df):
+    """Prepare uploaded data for prediction."""
+    X = df[FEATURE_COLS].copy()
+    for col in NUMERIC_COLS:
+        X[col] = pd.to_numeric(X[col], errors='coerce')
+        X[col] = X[col].fillna(X[col].median())
+    for col in CATEGORICAL_COLS:
+        X[col] = X[col].astype(str).fillna('Unknown')
+    return X
 
-clf, reg = train_model()
+def add_predictions(df, clf, reg):
+    """Add predictions and derived columns."""
+    X = preprocess_uploaded_data(df)
+    df['Delay_Status'] = clf.predict(X)
+    df['Delay_Days'] = reg.predict(X)
+    df['Delay_Status'] = df['Delay_Status'].map({1: "Delayed", 0: "On Time"})
+    
+    def risk_level(days):
+        if days > 20:
+            return "🔴 High"
+        elif days > 10:
+            return "🟡 Medium"
+        else:
+            return "🟢 Low"
+    df['Risk_Level'] = df['Delay_Days'].apply(risk_level)
+    
+    def identify_causes(row):
+        causes = []
+        if row.get('Weather') == 'Bad':
+            causes.append('Weather')
+        if row.get('Material_Availability') == 'No':
+            causes.append('Material Shortage')
+        if row.get('Labor_Availability') == 'Low':
+            causes.append('Labor Shortage')
+        if row.get('Equipment_Availability') == 'No':
+            causes.append('Equipment Issue')
+        if row.get('Permit_Approval') == 'No':
+            causes.append('Permit Delay')
+        if row.get('Supply_Delay') == 'Yes':
+            causes.append('Supply Chain')
+        if row.get('Manager_Experience', 10) < 5:
+            causes.append('Inexperienced Manager')
+        return ', '.join(causes) if causes else 'No clear cause'
+    df['Main_Causes'] = df.apply(identify_causes, axis=1)
+    return df
+
+def plot_risk_distribution(df):
+    fig, ax = plt.subplots(figsize=(8, 5))
+    df['Risk_Level'].value_counts().plot(kind='bar', color=['#28a745', '#ffc107', '#dc3545'], ax=ax)
+    ax.set_title('Risk Distribution', fontsize=14)
+    ax.set_xlabel('Risk Level')
+    ax.set_ylabel('Number of Projects')
+    ax.grid(axis='y', alpha=0.3)
+    return fig
+
+def plot_delay_histogram(df):
+    fig, ax = plt.subplots(figsize=(8, 5))
+    df['Delay_Days'].hist(bins=20, edgecolor='black', ax=ax)
+    ax.set_title('Distribution of Predicted Delay Days', fontsize=14)
+    ax.set_xlabel('Delay Days')
+    ax.set_ylabel('Frequency')
+    ax.grid(axis='y', alpha=0.3)
+    return fig
+
+def plot_top_causes(df):
+    cause_counts = df['Main_Causes'].value_counts().head(5)
+    fig, ax = plt.subplots(figsize=(8, 5))
+    cause_counts.plot(kind='barh', ax=ax)
+    ax.set_title('Top 5 Causes of Delay', fontsize=14)
+    ax.set_xlabel('Number of Projects')
+    ax.invert_yaxis()
+    ax.grid(axis='x', alpha=0.3)
+    return fig
+
+def generate_pdf_report(df, model_metrics, clf_score, reg_score, risk_fig, delay_fig, cause_fig):
+    """Create a comprehensive PDF report with deep analysis and suggestions."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+    styles = getSampleStyleSheet()
+    story = []
+    
+    # Title
+    title_style = ParagraphStyle('Title', parent=styles['Title'], fontSize=20, alignment=1, spaceAfter=12)
+    story.append(Paragraph("Project Delay Analysis Report", title_style))
+    story.append(Spacer(1, 12))
+    
+    # Date
+    from datetime import datetime
+    story.append(Paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']))
+    story.append(Spacer(1, 12))
+    
+    # Executive Summary
+    story.append(Paragraph("Executive Summary", styles['Heading2']))
+    story.append(Spacer(1, 6))
+    total = len(df)
+    delayed = len(df[df['Delay_Status'] == 'Delayed'])
+    high_risk = len(df[df['Risk_Level'] == '🔴 High'])
+    avg_delay = df['Delay_Days'].mean()
+    story.append(Paragraph(f"Total projects analyzed: {total}", styles['Normal']))
+    story.append(Paragraph(f"Delayed projects: {delayed} ({delayed/total*100:.1f}%)", styles['Normal']))
+    story.append(Paragraph(f"High-risk projects: {high_risk} ({high_risk/total*100:.1f}%)", styles['Normal']))
+    story.append(Paragraph(f"Average predicted delay: {avg_delay:.1f} days", styles['Normal']))
+    story.append(Spacer(1, 12))
+    
+    # Model Performance
+    story.append(Paragraph("Model Performance", styles['Heading2']))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(f"Classifier F1-score (cross-validation): {clf_score:.3f}", styles['Normal']))
+    story.append(Paragraph(f"Regressor MAE (cross-validation): {reg_score:.1f} days", styles['Normal']))
+    story.append(Spacer(1, 12))
+    
+    # Deep Analysis
+    story.append(Paragraph("Deep Analysis of Results", styles['Heading2']))
+    story.append(Spacer(1, 6))
+    # Risk distribution explanation
+    story.append(Paragraph("Risk Distribution:", styles['Heading3']))
+    story.append(Paragraph(f"The analysis shows that {high_risk} projects are at high risk of delay (>20 days). "
+                           f"Medium risk projects ({len(df[df['Risk_Level'] == '🟡 Medium'])}) require attention, while low-risk projects are generally on track.",
+                           styles['Normal']))
+    story.append(Spacer(1, 6))
+    
+    # Causes analysis
+    top_cause = df['Main_Causes'].value_counts().index[0] if not df.empty else "N/A"
+    story.append(Paragraph("Main Delay Factors:", styles['Heading3']))
+    story.append(Paragraph(f"The most frequent cause of delay is '{top_cause}', affecting a significant portion of projects. "
+                           f"Other common issues include material shortages, weather, and supply chain disruptions.",
+                           styles['Normal']))
+    story.append(Spacer(1, 6))
+    
+    # Suggestions
+    story.append(Paragraph("Actionable Recommendations", styles['Heading2']))
+    story.append(Spacer(1, 6))
+    suggestions = [
+        "• For high-risk projects, conduct weekly progress reviews and allocate contingency budgets.",
+        "• Address material shortages by diversifying suppliers and maintaining safety stock.",
+        "• Improve communication with contractors to mitigate permit and supply delays.",
+        "• Assign experienced project managers to complex projects.",
+        "• Implement weather contingency plans for sites in rural or adverse weather zones."
+    ]
+    for s in suggestions:
+        story.append(Paragraph(s, styles['Normal']))
+        story.append(Spacer(1, 4))
+    story.append(Spacer(1, 12))
+    
+    # Insert charts (save figures as images and embed)
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp1:
+        risk_fig.savefig(tmp1.name, format='png', dpi=100)
+        story.append(Image(tmp1.name, width=6*inch, height=4*inch))
+        story.append(Spacer(1, 12))
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp2:
+        delay_fig.savefig(tmp2.name, format='png', dpi=100)
+        story.append(Image(tmp2.name, width=6*inch, height=4*inch))
+        story.append(Spacer(1, 12))
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp3:
+        cause_fig.savefig(tmp3.name, format='png', dpi=100)
+        story.append(Image(tmp3.name, width=6*inch, height=4*inch))
+        story.append(Spacer(1, 12))
+    
+    # Footer note
+    story.append(Paragraph("This report was generated automatically by Project Delay AI. "
+                           "For further assistance, contact support.", styles['Normal']))
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
 
 # ===============================
-# FILE UPLOAD
+# MAIN APP
 # ===============================
-st.subheader("📂 Upload File (CSV or Excel)")
-file = st.file_uploader("Upload your dataset", type=["csv","xlsx"])
-
-if file:
-    try:
-        # Read file
-        df = pd.read_csv(file) if file.name.endswith("csv") else pd.read_excel(file)
-
-        if df.empty:
-            st.warning("File is empty")
+def main():
+    # Sidebar
+    st.sidebar.header("📁 Data Source")
+    data_source = st.sidebar.radio("Choose data source:", ["Use Sample Data", "Upload Your Data"])
+    
+    # Hyperparameter tuning option
+    use_tuning = st.sidebar.checkbox("Enable hyperparameter tuning (slower but potentially better)", value=False)
+    
+    df = None
+    if data_source == "Use Sample Data":
+        with st.spinner("Generating sample dataset..."):
+            df = generate_sample_data(50)  # At least 50 rows
+        st.sidebar.success("Sample data ready (50 projects).")
+        # Download sample template
+        csv_sample = df[FEATURE_COLS].to_csv(index=False).encode('utf-8')
+        st.sidebar.download_button(
+            label="📥 Download Sample Data (CSV)",
+            data=csv_sample,
+            file_name="project_sample.csv",
+            mime="text/csv",
+            help="Download this sample to test or modify."
+        )
+    else:
+        uploaded_file = st.sidebar.file_uploader("Upload CSV or Excel", type=['csv', 'xlsx'])
+        if uploaded_file:
+            try:
+                if uploaded_file.name.endswith('.csv'):
+                    df = pd.read_csv(uploaded_file)
+                else:
+                    df = pd.read_excel(uploaded_file)
+                st.sidebar.success(f"Loaded {len(df)} rows")
+            except Exception as e:
+                st.sidebar.error(f"Error reading file: {e}")
+                st.stop()
+        else:
+            st.sidebar.info("Please upload a file to continue.")
             st.stop()
+    
+    # Show data preview
+    with st.expander("📋 Data Preview (first 10 rows)"):
+        st.dataframe(df.head(10))
+    
+    # Train models
+    with st.spinner("Training prediction models..."):
+        clf, reg = train_models(df, tune=use_tuning)
+    
+    # Cross-validation scores
+    X_train = df[FEATURE_COLS]
+    y_class = df['Status']
+    y_reg = df['Delay_Days']
+    preprocessor = clf.named_steps['preprocessor']
+    X_pre = preprocessor.fit_transform(X_train)
+    clf_cv = cross_val_score(clf, X_train, y_class, cv=3, scoring='f1').mean()
+    reg_cv = -cross_val_score(reg, X_train, y_reg, cv=3, scoring='neg_mean_absolute_error').mean()
+    
+    # Predictions
+    result_df = add_predictions(df.copy(), clf, reg)
+    
+    # Display metrics
+    st.subheader("📊 Prediction Results")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Projects", len(result_df))
+    with col2:
+        delayed = len(result_df[result_df['Delay_Status'] == 'Delayed'])
+        st.metric("Delayed Projects", delayed, delta=f"{delayed/len(result_df)*100:.1f}%")
+    with col3:
+        avg_delay = result_df['Delay_Days'].mean()
+        st.metric("Avg Delay Days", f"{avg_delay:.1f}")
+    with col4:
+        high_risk = len(result_df[result_df['Risk_Level'] == '🔴 High'])
+        st.metric("High Risk Projects", high_risk)
+    
+    # Show table
+    st.subheader("📄 Detailed Results")
+    st.dataframe(result_df, use_container_width=True)
+    
+    # Download results as CSV
+    csv_results = result_df.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Download Results CSV", csv_results, "delay_results.csv", "text/csv")
+    
+    # Visualizations
+    st.subheader("📈 Visual Analysis")
+    risk_fig = plot_risk_distribution(result_df)
+    delay_fig = plot_delay_histogram(result_df)
+    cause_fig = plot_top_causes(result_df)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.pyplot(risk_fig)
+        st.caption("Risk levels of projects")
+    with col2:
+        st.pyplot(delay_fig)
+        st.caption("Distribution of predicted delay days")
+    st.pyplot(cause_fig)
+    st.caption("Top root causes contributing to delays")
+    
+    # PDF Report Generation
+    st.subheader("📄 Generate Comprehensive Report")
+    if st.button("Generate PDF Report with Analysis & Suggestions"):
+        with st.spinner("Creating report..."):
+            pdf_buffer = generate_pdf_report(
+                result_df, None, clf_cv, reg_cv,
+                risk_fig, delay_fig, cause_fig
+            )
+        st.download_button(
+            label="⬇️ Download Full Report (PDF)",
+            data=pdf_buffer,
+            file_name="project_delay_report.pdf",
+            mime="application/pdf"
+        )
+        st.success("Report generated! Click the button above to download.")
+    
+    # Footer
+    st.markdown("---")
+    st.markdown("<p style='text-align: center;'>Made by Esrom | Project Delay AI System</p>", unsafe_allow_html=True)
 
-        # Normalize columns
-        df.columns = df.columns.str.strip().str.replace(" ", "_")
-
-        # Ensure required columns exist
-        for col in feature_cols:
-            if col not in df.columns:
-                df[col] = np.nan
-
-        X = df[feature_cols].copy()
-
-        # Clean numeric
-        for col in numeric_cols:
-            X[col] = pd.to_numeric(X[col], errors='coerce')
-            X[col] = X[col].fillna(X[col].median())
-
-        # Clean categorical
-        for col in categorical_cols:
-            X[col] = X[col].astype(str).fillna("Unknown")
-
-        # Predict
-        if clf is None or reg is None:
-            st.error("Model not available")
-            st.stop()
-
-        df['Delay_Status'] = clf.predict(X)
-        df['Delay_Days'] = reg.predict(X)
-        df['Delay_Status'] = df['Delay_Status'].map({1:"Delayed",0:"On Time"})
-
-        # Risk
-        def risk(x):
-            return "🔴 High" if x>20 else "🟡 Medium" if x>10 else "🟢 Low"
-
-        df['Risk_Level'] = df['Delay_Days'].apply(risk)
-
-        # ===============================
-        # ROOT CAUSES
-        # ===============================
-        def causes(row):
-            c = []
-            if row['Weather']=='Bad': c.append('Weather')
-            if row['Material_Availability']=='No': c.append('Material')
-            if row['Labor_Availability']=='Low': c.append('Labor')
-            if row['Equipment_Availability']=='No': c.append('Equipment')
-            if row['Permit_Approval']=='No': c.append('Permit')
-            if row['Supply_Delay']=='Yes': c.append('Supply')
-            return ", ".join(c) if c else "Normal"
-
-        df['Main_Causes'] = df.apply(causes, axis=1)
-
-        # ===============================
-        # RESULTS
-        # ===============================
-        st.subheader("📊 Results")
-        st.dataframe(df)
-
-        # ===============================
-        # VISUALS
-        # ===============================
-        st.subheader("📈 Visual Analysis")
-
-        # Risk Chart
-        fig1 = plt.figure()
-        df['Risk_Level'].value_counts().plot(kind='bar')
-        plt.title("Risk Distribution")
-        st.pyplot(fig1)
-        st.info("Shows distribution of project risks.")
-
-        # Delay Histogram
-        fig2 = plt.figure()
-        df['Delay_Days'].plot(kind='hist', bins=20)
-        plt.title("Delay Distribution")
-        st.pyplot(fig2)
-        st.info("Shows how delays are spread.")
-
-        # Causes
-        fig3 = plt.figure()
-        df['Main_Causes'].value_counts().head(5).plot(kind='bar')
-        plt.title("Top Causes")
-        st.pyplot(fig3)
-        st.info("Top reasons causing delays.")
-
-        # ===============================
-        # INTERPRETATION
-        # ===============================
-        st.subheader("🧠 Insights")
-
-        total = len(df)
-        high = len(df[df['Risk_Level']=="🔴 High"])
-
-        st.write(f"""
-        Total Projects: {total}  
-        High Risk: {high}  
-
-        Key Issues:
-        - Supply chain delays
-        - Material shortages
-        - Low experience management
-
-        Fixes:
-        - Improve planning
-        - Strengthen logistics
-        - Assign experienced managers
-        """)
-
-    except Exception as e:
-        st.error("Error processing file")
-        st.exception(e)
+if __name__ == "__main__":
+    main()
