@@ -1,4 +1,4 @@
-# 🏗️ Project Delay AI System
+# 🏗️ Project Delay AI System made by "ESROM ADUGNA GSE/4064/2018"
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-url.streamlit.app)  
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
