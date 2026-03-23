@@ -12,38 +12,14 @@ from sklearn.preprocessing import OneHotEncoder
 st.set_page_config(page_title="Project Delay AI", layout="wide")
 
 # ===============================
-# UI HEADER
+# HEADER
 # ===============================
 st.title("🏗️ Project Delay AI System")
 st.write("Smart Prediction • Risk Analysis • Decision Support")
 st.markdown("<div style='text-align:center; color:#00ffcc;'>Made by Esra</div>", unsafe_allow_html=True)
 
 # ===============================
-# SAMPLE DATA
-# ===============================
-st.subheader("📥 Sample Template")
-sample_data = pd.DataFrame({
-    "Project_Size":["Small","Medium","Large"],
-    "Budget":[120000,300000,600000],
-    "Team_Size":[6,12,20],
-    "Planned_Duration":[30,70,120],
-    "Weather":["Good","Bad","Good"],
-    "Material_Availability":["Yes","No","Yes"],
-    "Manager_Experience":[5,4,8],
-    "Contractor_Experience":[7,10,15],
-    "Labor_Availability":["High","Medium","Low"],
-    "Equipment_Availability":["Yes","No","Yes"],
-    "Site_Location":["Urban","Rural","Urban"],
-    "Permit_Approval":["Yes","No","Yes"],
-    "Inflation_Rate":[12,18,10],
-    "Supply_Delay":["No","Yes","No"]
-})
-
-st.download_button("Download Template", sample_data.to_csv(index=False), "template.csv")
-st.dataframe(sample_data)
-
-# ===============================
-# FEATURE SET
+# FEATURE DEFINITION (SOURCE OF TRUTH)
 # ===============================
 feature_cols = [
     'Project_Size','Budget','Team_Size','Planned_Duration','Weather',
@@ -57,172 +33,169 @@ categorical_cols = [
     'Equipment_Availability','Site_Location','Permit_Approval','Supply_Delay'
 ]
 
-# ===============================
-# COLUMN NORMALIZATION + AUTO MATCHING
-# ===============================
+numeric_cols = [col for col in feature_cols if col not in categorical_cols]
 
+# ===============================
+# SAMPLE TEMPLATE (ALIGNED EXACTLY)
+# ===============================
+st.subheader("📥 Download Correct Template")
+sample_data = pd.DataFrame(columns=feature_cols)
+
+st.download_button("Download Template", sample_data.to_csv(index=False), "template.csv")
+st.dataframe(sample_data)
+
+# ===============================
+# COLUMN NORMALIZATION
+# ===============================
 def normalize_columns(df):
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
     return df
 
-# Alias mapping for flexible input handling
-COLUMN_ALIASES = {
-    'project_size': 'Project_Size',
-    'budget': 'Budget',
-    'team_size': 'Team_Size',
-    'planned_duration': 'Planned_Duration',
-    'weather': 'Weather',
-    'material_availability': 'Material_Availability',
-    'manager_experience': 'Manager_Experience',
-    'contractor_experience': 'Contractor_Experience',
-    'labor_availability': 'Labor_Availability',
-    'equipment_availability': 'Equipment_Availability',
-    'site_location': 'Site_Location',
-    'permit_approval': 'Permit_Approval',
-    'inflation_rate': 'Inflation_Rate',
-    'supply_delay': 'Supply_Delay'
-}
+COLUMN_ALIASES = {col.lower(): col for col in feature_cols}
 
 # ===============================
-# MODEL TRAINING PIPELINE
+# MODEL TRAINING
 # ===============================
 @st.cache_resource
 def train_models():
-    np.random.seed(42)
-    data = []
+    try:
+        np.random.seed(42)
+        data = []
 
-    for _ in range(1200):
-        row = {
-            'Project_Size': np.random.choice(['Small','Medium','Large']),
-            'Budget': np.random.randint(80000,700000),
-            'Team_Size': np.random.randint(3,30),
-            'Planned_Duration': np.random.randint(20,180),
-            'Weather': np.random.choice(['Good','Bad']),
-            'Material_Availability': np.random.choice(['Yes','No']),
-            'Manager_Experience': np.random.randint(1,15),
-            'Contractor_Experience': np.random.randint(1,20),
-            'Labor_Availability': np.random.choice(['High','Medium','Low']),
-            'Equipment_Availability': np.random.choice(['Yes','No']),
-            'Site_Location': np.random.choice(['Urban','Rural']),
-            'Permit_Approval': np.random.choice(['Yes','No']),
-            'Inflation_Rate': np.random.uniform(5,30),
-            'Supply_Delay': np.random.choice(['Yes','No'])
-        }
+        for _ in range(1200):
+            row = {
+                'Project_Size': np.random.choice(['Small','Medium','Large']),
+                'Budget': np.random.randint(80000,700000),
+                'Team_Size': np.random.randint(3,30),
+                'Planned_Duration': np.random.randint(20,180),
+                'Weather': np.random.choice(['Good','Bad']),
+                'Material_Availability': np.random.choice(['Yes','No']),
+                'Manager_Experience': np.random.randint(1,15),
+                'Contractor_Experience': np.random.randint(1,20),
+                'Labor_Availability': np.random.choice(['High','Medium','Low']),
+                'Equipment_Availability': np.random.choice(['Yes','No']),
+                'Site_Location': np.random.choice(['Urban','Rural']),
+                'Permit_Approval': np.random.choice(['Yes','No']),
+                'Inflation_Rate': np.random.uniform(5,30),
+                'Supply_Delay': np.random.choice(['Yes','No'])
+            }
 
-        delay = 0
-        if row['Weather']=='Bad': delay += 10
-        if row['Material_Availability']=='No': delay += 15
-        if row['Labor_Availability']=='Low': delay += 10
-        if row['Equipment_Availability']=='No': delay += 8
-        if row['Permit_Approval']=='No': delay += 12
-        if row['Supply_Delay']=='Yes': delay += 10
-        if row['Site_Location']=='Rural': delay += 5
-        if row['Manager_Experience'] < 5: delay += 7
+            delay = 0
+            if row['Weather']=='Bad': delay += 10
+            if row['Material_Availability']=='No': delay += 15
+            if row['Labor_Availability']=='Low': delay += 10
+            if row['Equipment_Availability']=='No': delay += 8
+            if row['Permit_Approval']=='No': delay += 12
+            if row['Supply_Delay']=='Yes': delay += 10
+            if row['Site_Location']=='Rural': delay += 5
+            if row['Manager_Experience'] < 5: delay += 7
 
-        delay += int(row['Inflation_Rate']/5)
-        delay += np.random.randint(0,5)
+            delay += int(row['Inflation_Rate']/5)
+            delay += np.random.randint(0,5)
 
-        row['Delay_Days'] = delay
-        row['Status'] = 1 if delay > 10 else 0
+            row['Delay_Days'] = delay
+            row['Status'] = 1 if delay > 10 else 0
+            data.append(row)
 
-        data.append(row)
+        df = pd.DataFrame(data)
 
-    df = pd.DataFrame(data)
+        X = df[feature_cols]
+        y_class = df['Status']
+        y_reg = df['Delay_Days']
 
-    X = df[feature_cols]
-    y_class = df['Status']
-    y_reg = df['Delay_Days']
-
-    preprocessor = ColumnTransformer(
-        transformers=[
+        preprocessor = ColumnTransformer([
             ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
-        ],
-        remainder='passthrough'
-    )
+        ], remainder='passthrough')
 
-    clf = Pipeline([
-        ('preprocessor', preprocessor),
-        ('model', RandomForestClassifier())
-    ])
+        clf = Pipeline([('prep', preprocessor), ('model', RandomForestClassifier())])
+        reg = Pipeline([('prep', preprocessor), ('model', RandomForestRegressor())])
 
-    reg = Pipeline([
-        ('preprocessor', preprocessor),
-        ('model', RandomForestRegressor())
-    ])
+        clf.fit(X, y_class)
+        reg.fit(X, y_reg)
 
-    clf.fit(X, y_class)
-    reg.fit(X, y_reg)
+        return clf, reg
 
-    return clf, reg
+    except Exception as e:
+        st.error(f"Model training failed: {e}")
+        return None, None
 
 clf, reg = train_models()
 
 # ===============================
 # FILE UPLOAD
 # ===============================
-st.subheader("📂 Upload File (Excel or CSV)")
+st.subheader("📂 Upload File (CSV or Excel)")
 file = st.file_uploader("Upload your dataset", type=["csv","xlsx"])
 
 if file:
-    # Read file
-    if file.name.endswith('.csv'):
-        df = pd.read_csv(file)
-    else:
-        df = pd.read_excel(file)
+    try:
+        # File reading
+        if file.name.endswith('.csv'):
+            df = pd.read_csv(file)
+        else:
+            df = pd.read_excel(file)
 
-    # Normalize column names
-    df = normalize_columns(df)
+        if df.empty:
+            st.warning("Uploaded file is empty")
+            st.stop()
 
-    # Rename columns using aliases
-    df = df.rename(columns=COLUMN_ALIASES)
+        df = normalize_columns(df)
+        df = df.rename(columns=COLUMN_ALIASES)
 
-    st.success("File uploaded and processed successfully")
-    st.dataframe(df)
+        st.success("File processed successfully")
+        st.dataframe(df)
 
-    # Keep only relevant columns, create missing ones if absent
-    for col in feature_cols:
-        if col not in df.columns:
-            df[col] = np.nan
+        # Ensure all required columns exist
+        for col in feature_cols:
+            if col not in df.columns:
+                df[col] = np.nan
 
-    # Reorder columns exactly as expected
-    X = df[feature_cols]
+        X = df[feature_cols].copy()
 
-    # Handle missing numeric values
-    for col in numeric_cols:
-        if col in X.columns:
+        # Numeric handling
+        for col in numeric_cols:
             X[col] = pd.to_numeric(X[col], errors='coerce')
-            X[col] = X[col].fillna(X[col].median())
+            if X[col].isnull().all():
+                X[col] = 0
+            else:
+                X[col] = X[col].fillna(X[col].median())
 
-    # Handle missing categorical values
-    for col in categorical_cols:
-        if col in X.columns:
-            X[col] = X[col].fillna('Unknown')
+        # Categorical handling
+        for col in categorical_cols:
+            X[col] = X[col].astype(str).fillna('Unknown')
 
-    # Predictions
-    df['Delay_Status'] = clf.predict(X)
-    df['Delay_Days'] = reg.predict(X)
+        # Prediction safety
+        if clf is None or reg is None:
+            st.error("Model not available")
+            st.stop()
 
-    df['Delay_Status'] = df['Delay_Status'].map({1:"Delayed",0:"On Time"})
+        df['Delay_Status'] = clf.predict(X)
+        df['Delay_Days'] = reg.predict(X)
 
-    def risk(x):
-        if x > 20:
-            return "🔴 High"
-        elif x > 10:
-            return "🟡 Medium"
-        return "🟢 Low"
+        df['Delay_Status'] = df['Delay_Status'].map({1:"Delayed",0:"On Time"})
 
-    df['Risk_Level'] = df['Delay_Days'].apply(risk)
+        def risk(x):
+            if x > 20:
+                return "🔴 High"
+            elif x > 10:
+                return "🟡 Medium"
+            return "🟢 Low"
 
-    st.subheader("📊 Results")
-    st.dataframe(df)
+        df['Risk_Level'] = df['Delay_Days'].apply(risk)
 
-    st.subheader("📈 Dashboard")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Projects", len(df))
-    c2.metric("Delayed", (df['Delay_Status']=="Delayed").sum())
-    c3.metric("High Risk", (df['Risk_Level']=="🔴 High").sum())
+        st.subheader("📊 Results")
+        st.dataframe(df)
 
-    st.bar_chart(df['Risk_Level'].value_counts())
+        st.subheader("📈 Dashboard")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total Projects", len(df))
+        c2.metric("Delayed", (df['Delay_Status']=="Delayed").sum())
+        c3.metric("High Risk", (df['Risk_Level']=="🔴 High").sum())
 
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("Download Results", csv, "results.csv")
+        st.bar_chart(df['Risk_Level'].value_counts())
+
+        st.download_button("Download Results", df.to_csv(index=False), "results.csv")
+
+    except Exception as e:
+        st.error("An error occurred while processing the file")
+        st.exception(e)
